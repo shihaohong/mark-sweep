@@ -40,6 +40,10 @@ typedef struct {
 
   /* The number of objects required to trigger a GC. */
   int maxObjects;
+
+  int gcCalls;
+  int numMarkedObjs;
+  int numSweptObjs;
 } VM;
 
 void assert(int condition, const char* message) {
@@ -55,6 +59,9 @@ VM* newVM() {
   vm->firstObject = NULL;
   vm->numObjects = 0;
   vm->maxObjects = INIT_OBJ_NUM_MAX;
+  vm->gcCalls = 0;
+  vm->numMarkedObjs = 0;
+  vm->numSweptObjs = 0;
   return vm;
 }
 
@@ -70,23 +77,24 @@ Object* pop(VM* vm) {
   return vm->stack[--vm->stackSize];
 }
 
-void mark(Object* object) {
+void mark(VM* vm, Object* object) {
   /* If already marked, we're done. Check this first to avoid recursing
      on cycles in the object graph. */
   if (object->marked) return;
 
   object->marked = 1;
+  vm->numMarkedObjs++;
 
   if (object->type == OBJ_PAIR) {
-    mark(object->head);
-    mark(object->tail);
+    mark(vm, object->head);
+    mark(vm, object->tail);
   }
 }
 
 void markAll(VM* vm)
 {
   for (int i = 0; i < vm->stackSize; i++) {
-    mark(vm->stack[i]);
+    mark(vm, vm->stack[i]);
   }
 }
 
@@ -108,6 +116,8 @@ void sweep(VM* vm)
       (*object)->marked = 0;
       object = &(*object)->next;
     }
+
+    vm->numSweptObjs++;
   }
 }
 
@@ -121,6 +131,14 @@ void gc(VM* vm) {
 
   printf("Collected %d objects, %d remaining.\n", numObjects - vm->numObjects,
          vm->numObjects);
+  vm->gcCalls++;
+  printf("gcCalls so far: %d.\n", vm->gcCalls);
+  printf("numSweptObjs so far: %d.\n", vm->numSweptObjs);
+  printf("numMarkedObjs so far: %d.\n", vm->numMarkedObjs);
+
+  // reset marked and swept num
+  vm->numSweptObjs = 0;
+  vm->numMarkedObjs = 0;
 }
 
 Object* newObject(VM* vm, ObjectType type) {
